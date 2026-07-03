@@ -1,0 +1,31 @@
+# 1. Environment Variables (Security Limits)
+.env
+*.env
+
+# 2. Python Virtual Environment (Heavy Folders)
+venv/
+.venv/
+env/
+ENV/
+
+# 3. Python Cache Files (Junk/Compiled Files)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 4. IDEs aur Editors ki Configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+
+# 5. OS Generated Files (System Garbage)
+Thumbs.db
+db.db
+Desktop.ini
+.DS_Store
+
+# 6. Log Files (Debugging Garbage)
+*.log
