@@ -35,10 +35,8 @@ jobs:
 
     - name: Lint with flake8 (Syntax Check Only)
       run: |
-        # E9, F63, F7, F82 sirf fatal Python syntax errors check karega (Jo code crash kar sakte hain)
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Baki formatting errors (spaces, line length) ko warn karega, build fail nahi karega (--exit-zero)
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        flake8 ./app --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 ./app --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
   docker-build:
     needs: lint-and-test

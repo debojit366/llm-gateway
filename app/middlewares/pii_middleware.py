@@ -13,7 +13,6 @@ class PIIMaskingMiddleware:
             body_chunks = []
             
             async def receive_with_masking():
-                nonlocal body_chunks
                 message = await receive()
                 
                 if message["type"] == "http.request":
