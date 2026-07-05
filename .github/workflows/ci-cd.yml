@@ -12,14 +12,15 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v4.2.2
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v5.3.0
       with:
         python-version: '3.11'
+
     - name: Cache Python Packages
-      uses: actions/cache@v4
+      uses: actions/cache@v4.2.0
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
@@ -32,9 +33,11 @@ jobs:
         pip install flake8
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    - name: Lint with flake8 (Syntax Check)
+    - name: Lint with flake8 (Syntax Check Only)
       run: |
+        # E9, F63, F7, F82 sirf fatal Python syntax errors check karega (Jo code crash kar sakte hain)
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Baki formatting errors (spaces, line length) ko warn karega, build fail nahi karega (--exit-zero)
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
   docker-build:
@@ -43,13 +46,13 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v4.2.2
 
     - name: Set up Docker Buildx
-      uses: actions/setup-buildx-action@v3
+      uses: actions/setup-buildx-action@v3.8.0
 
     - name: Build Docker Image (Dry Run)
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6.13.0
       with:
         context: .
         file: ./Dockerfile
