@@ -36,7 +36,7 @@ class RateLimitMiddleware:
                 if request_count > RATE_LIMIT:
                     response = JSONResponse(
                         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                        content={"detail": "Too many requests. Bhai, thoda ruko! Limit 5 requests per minute hai."}
+                        content={"detail": "Too many requests."}
                     )
                     await response(scope, receive, send)
                     return

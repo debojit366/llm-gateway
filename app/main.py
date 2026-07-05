@@ -3,8 +3,14 @@ from fastapi import FastAPI
 from app.api.v1.endpoints import chat
 import httpx
 from app.middlewares.pii_middleware import PIIMaskingMiddleware 
+from app.middlewares.rate_limit_middleware import RateLimitMiddleware
+
+
+
+
 app = FastAPI(title="Intelligent Gemini AI Gateway", version="1.0.0")
 app.add_middleware(PIIMaskingMiddleware)
+app.add_middleware(RateLimitMiddleware)
 @app.on_event("startup")
 async def startup_event():
     app.state.http_client = httpx.AsyncClient(
