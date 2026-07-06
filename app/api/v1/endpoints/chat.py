@@ -40,11 +40,16 @@ def translate_to_gemini_format(openai_body: dict) -> dict:
 @router.post("/completions")
 async def proxy_gemini_completions(
     request: Request, 
-    background_tasks: BackgroundTasks, 
-    payload: Dict[str, Any] = Body(...)
+    background_tasks: BackgroundTasks
 ):
-   
-    body = payload
+    try:
+        # 📥 Raw Request se direct JSON body extract karo
+        body = await request.json()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid JSON payload provided"
+        )
 
     model_name = body.get("model", "gemini-2.5-flash")
     gemini_payload = translate_to_gemini_format(body)
@@ -67,12 +72,15 @@ async def proxy_gemini_completions(
                 detail=f"Gemini Upstream Error: {upstream_response.text}"
             )
 
+        # 🌐 1. Client IP aur Prompt nikal lo analytics ke liye
         client_ip = request.client.host if request.client else "unknown"
         openai_messages = body.get("messages", [])
         last_prompt = openai_messages[-1].get("content", "") if openai_messages else ""
 
+        # ⚡ 2. Background Task me daal do taaki streaming block na ho
         background_tasks.add_task(save_request_analytics, client_ip, model_name, last_prompt)
 
+        # 🚀 3. Turant user ko streaming response bhej do
         return StreamingResponse(
             upstream_response.aiter_bytes(),
             status_code=upstream_response.status_code,

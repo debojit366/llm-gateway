@@ -25,10 +25,10 @@ services:
 
 
   mongodb:           
-    image: mongo:6.0
+    image: mongo:latest
     container_name: llm-gateway-mongodb
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - mongo_data:/data/db  
     restart: always
