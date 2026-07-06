@@ -12,7 +12,8 @@ services:
     volumes:
       - ./app:/code/app
     depends_on:
-      - redis         
+      - redis    
+      - mongodb     
     restart: always
 
   redis:
@@ -21,3 +22,17 @@ services:
     ports:
       - "6379:6379"   
     restart: always
+
+
+  mongodb:           
+    image: mongo:6.0
+    container_name: llm-gateway-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db  
+    restart: always
+
+
+volumes:
+  mongo_data:
