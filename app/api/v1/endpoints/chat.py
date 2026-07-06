@@ -1,8 +1,9 @@
 # app/api/v1/endpoints/chat.py
-from fastapi import APIRouter, Request, HTTPException, status, Body
+from fastapi import APIRouter, Request, HTTPException, status, Body, BackgroundTasks # <-- BackgroundTasks import kiya
 from fastapi.responses import StreamingResponse
 from app.core.config import settings
 from typing import Dict, Any
+from app.services.analytics_service import save_request_analytics
 import httpx
 
 router = APIRouter()
@@ -37,7 +38,11 @@ def translate_to_gemini_format(openai_body: dict) -> dict:
 
 
 @router.post("/completions")
-async def proxy_gemini_completions(request: Request, payload: Dict[str, Any] = Body(...)):
+async def proxy_gemini_completions(
+    request: Request, 
+    background_tasks: BackgroundTasks, 
+    payload: Dict[str, Any] = Body(...)
+):
    
     body = payload
 
@@ -61,6 +66,12 @@ async def proxy_gemini_completions(request: Request, payload: Dict[str, Any] = B
                 status_code=upstream_response.status_code, 
                 detail=f"Gemini Upstream Error: {upstream_response.text}"
             )
+
+        client_ip = request.client.host if request.client else "unknown"
+        openai_messages = body.get("messages", [])
+        last_prompt = openai_messages[-1].get("content", "") if openai_messages else ""
+
+        background_tasks.add_task(save_request_analytics, client_ip, model_name, last_prompt)
 
         return StreamingResponse(
             upstream_response.aiter_bytes(),
