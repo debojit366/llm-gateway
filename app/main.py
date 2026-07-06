@@ -1,6 +1,6 @@
 # app/main.py
 from fastapi import FastAPI
-from app.api.v1.endpoints import chat
+from app.api.v1.endpoints import chat,analytics
 import httpx
 from app.middlewares.pii_middleware import PIIMaskingMiddleware 
 from app.middlewares.rate_limit_middleware import RateLimitMiddleware
@@ -27,3 +27,4 @@ async def health_check():
     return {"status": "healthy", "provider": "gemini-active"}
 
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
+app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])

@@ -1,12 +1,32 @@
-# app/api/v1/endpoints/chat.py
-from fastapi import APIRouter, Request, HTTPException, status, Body, BackgroundTasks # <-- BackgroundTasks import kiya
+from fastapi import APIRouter, Request, HTTPException, status, Body, BackgroundTasks
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from app.core.config import settings
-from typing import Dict, Any
+from typing import Dict, Any, List
 from app.services.analytics_service import save_request_analytics
 import httpx
 
 router = APIRouter()
+class ChatMessage(BaseModel):
+    role: str = Field(..., description="Role of the message author (e.g., system, user, assistant)")
+    content: str = Field(..., description="The contents of the message")
+
+class OpenAICompletionRequest(BaseModel):
+    model: str = Field("gemini-2.5-flash", description="The ID of the model to use")
+    messages: List[ChatMessage] = Field(..., description="A list of messages comprising the conversation so far")
+    temperature: float = Field(None, description="What sampling temperature to use")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "model": "gemini-2.5-flash",
+                "messages": [
+                    {"role": "user", "content": "write your message here"}
+                ],
+                "temperature": 0.7
+            }
+        }
+
 
 def translate_to_gemini_format(openai_body: dict) -> dict:
     openai_messages = openai_body.get("messages", [])
@@ -31,7 +51,7 @@ def translate_to_gemini_format(openai_body: dict) -> dict:
     if system_instruction:
         gemini_payload["systemInstruction"] = system_instruction
         
-    if "temperature" in openai_body:
+    if "temperature" in openai_body and openai_body["temperature"] is not None:
         gemini_payload["generationConfig"] = {"temperature": openai_body["temperature"]}
 
     return gemini_payload
@@ -40,16 +60,10 @@ def translate_to_gemini_format(openai_body: dict) -> dict:
 @router.post("/completions")
 async def proxy_gemini_completions(
     request: Request, 
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    payload: OpenAICompletionRequest = Body(...) 
 ):
-    try:
-        # 📥 Raw Request se direct JSON body extract karo
-        body = await request.json()
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid JSON payload provided"
-        )
+    body = payload.model_dump(exclude_unset=True)
 
     model_name = body.get("model", "gemini-2.5-flash")
     gemini_payload = translate_to_gemini_format(body)
@@ -72,15 +86,12 @@ async def proxy_gemini_completions(
                 detail=f"Gemini Upstream Error: {upstream_response.text}"
             )
 
-        # 🌐 1. Client IP aur Prompt nikal lo analytics ke liye
         client_ip = request.client.host if request.client else "unknown"
         openai_messages = body.get("messages", [])
         last_prompt = openai_messages[-1].get("content", "") if openai_messages else ""
 
-        # ⚡ 2. Background Task me daal do taaki streaming block na ho
         background_tasks.add_task(save_request_analytics, client_ip, model_name, last_prompt)
 
-        # 🚀 3. Turant user ko streaming response bhej do
         return StreamingResponse(
             upstream_response.aiter_bytes(),
             status_code=upstream_response.status_code,
