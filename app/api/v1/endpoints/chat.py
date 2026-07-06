@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Request, HTTPException, status, Body, BackgroundTasks
+from fastapi import APIRouter, Request, HTTPException, status, Body, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from app.core.config import settings
 from typing import Dict, Any, List
+from app.core.security import verify_api_key
 from app.services.analytics_service import save_request_analytics
 import httpx
+
+
 
 router = APIRouter()
 class ChatMessage(BaseModel):
@@ -61,7 +64,8 @@ def translate_to_gemini_format(openai_body: dict) -> dict:
 async def proxy_gemini_completions(
     request: Request, 
     background_tasks: BackgroundTasks,
-    payload: OpenAICompletionRequest = Body(...) 
+    payload: OpenAICompletionRequest = Body(...),
+    current_user: dict = Depends(verify_api_key)
 ):
     body = payload.model_dump(exclude_unset=True)
 
@@ -90,7 +94,9 @@ async def proxy_gemini_completions(
         openai_messages = body.get("messages", [])
         last_prompt = openai_messages[-1].get("content", "") if openai_messages else ""
 
-        background_tasks.add_task(save_request_analytics, client_ip, model_name, last_prompt)
+        user_id = str(current_user["_id"])
+
+        background_tasks.add_task(save_request_analytics, client_ip, model_name, last_prompt, user_id)
 
         return StreamingResponse(
             upstream_response.aiter_bytes(),

@@ -1,6 +1,6 @@
 # app/main.py
 from fastapi import FastAPI
-from app.api.v1.endpoints import chat,analytics
+from app.api.v1.endpoints import chat,analytics,auth
 import httpx
 from app.middlewares.pii_middleware import PIIMaskingMiddleware 
 from app.middlewares.rate_limit_middleware import RateLimitMiddleware
@@ -28,3 +28,4 @@ async def health_check():
 
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
