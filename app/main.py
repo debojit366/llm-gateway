@@ -4,7 +4,7 @@ from app.api.v1.endpoints import chat
 import httpx
 from app.middlewares.pii_middleware import PIIMaskingMiddleware 
 from app.middlewares.rate_limit_middleware import RateLimitMiddleware
-
+from app.db.mongo import connect_to_mongo, close_mongo_connection
 
 
 
@@ -16,10 +16,11 @@ async def startup_event():
     app.state.http_client = httpx.AsyncClient(
         limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
     )
-
+    await connect_to_mongo()
 @app.on_event("shutdown")
 async def shutdown_event():
     await app.state.http_client.aclose()
+    await close_mongo_connection()
 
 @app.get("/health")
 async def health_check():
