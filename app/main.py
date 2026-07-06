@@ -5,10 +5,18 @@ import httpx
 from app.middlewares.pii_middleware import PIIMaskingMiddleware 
 from app.middlewares.rate_limit_middleware import RateLimitMiddleware
 from app.db.mongo import connect_to_mongo, close_mongo_connection
-
-
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Intelligent Gemini AI Gateway", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 app.add_middleware(PIIMaskingMiddleware)
 app.add_middleware(RateLimitMiddleware)
 @app.on_event("startup")
