@@ -1,31 +1,77 @@
-# 1. Environment Variables (Security Limits)
+# ==========================
+# Environment Variables
+# ==========================
 .env
 *.env
 
-# 2. Python Virtual Environment (Heavy Folders)
+# ==========================
+# Python Virtual Environment
+# ==========================
 venv/
 .venv/
 env/
 ENV/
 
-# 3. Python Cache Files (Junk/Compiled Files)
+# ==========================
+# Python Cache Files
+# ==========================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# 4. IDEs aur Editors ki Configurations
+# ==========================
+# Python Build Files
+# ==========================
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ==========================
+# Node.js / Vite
+# ==========================
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================
+# IDE / Editor
+# ==========================
 .vscode/
 .idea/
 *.suo
 *.ntvs*
 *.njsproj
 
-# 5. OS Generated Files (System Garbage)
+# ==========================
+# OS Files
+# ==========================
 Thumbs.db
-db.db
 Desktop.ini
 .DS_Store
 
-# 6. Log Files (Debugging Garbage)
+# ==========================
+# Logs
+# ==========================
 *.log
+
+# ==========================
+# Database (Local)
+# ==========================
+*.sqlite3
+*.db
+
+# ==========================
+# Misc
+# ==========================
+coverage/
+.cache/
+.eslintcache

@@ -7,27 +7,47 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+
+
+
   const fetchMetrics = async () => {
-    setLoading(true);
-    setError(null);
+  setLoading(true);
+  setError(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/analytics/dashboard?range=${range}`);
+      const res = await fetch(`http://localhost:8000/api/v1/analytics/dashboard?range=${range}`, {
+        method: "GET",
+        headers: {
+          "X-API-KEY": "gw_jHyIS09a9KwUmzPXEPlzMqPRCwePllXlLRICgAvuAIk" 
+        }
+      });
+      
       if (!res.ok) {
-        throw new Error(`Server gave ${res.status} status `);
+        throw new Error(`server error! Status: ${res.status}`);
       }
       const data = await res.json();
       setMetrics(data);
     } catch (err) {
-      console.error("Fetch block error:", err);
-      setError("Backend unreachable or CORS issue");
+      console.error(err);
+      setError("Auth failed or backend down!");
     } finally {
       setLoading(false);
     }
   };
 
+
+
+
+
   useEffect(() => {
+  fetchMetrics();
+
+  const interval = setInterval(() => {
     fetchMetrics();
-  }, [range]);
+  }, 5000); 
+
+  return () => clearInterval(interval);
+}, [range]);
+
 
   return (
     <div className="p-8 bg-zinc-950 min-h-screen text-zinc-100 font-sans antialiased">

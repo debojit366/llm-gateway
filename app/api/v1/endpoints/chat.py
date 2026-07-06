@@ -96,7 +96,13 @@ async def proxy_gemini_completions(
 
         user_id = str(current_user["_id"])
 
-        background_tasks.add_task(save_request_analytics, client_ip, model_name, last_prompt, user_id)
+        background_tasks.add_task(
+            save_request_analytics, 
+            user_id,         # 1st: user_id
+            client_ip,       # 2nd: client_ip
+            model_name,      # 3rd: model
+            last_prompt      # 4th: prompt_text
+        )
 
         return StreamingResponse(
             upstream_response.aiter_bytes(),
