@@ -1,27 +1,30 @@
-import datetime
+from datetime import datetime, timezone
 from app.db.mongo import db_helper
 from bson import ObjectId 
 
-async def save_request_analytics(user_id: str, client_ip: str, model: str, prompt_text: str):
-    prompt_words = len(prompt_text.split())
-    estimated_tokens = int(prompt_words * 1.3)
-    
-    cost_usd = (estimated_tokens / 1000000) * 0.075
-    
-    db_user_id = ObjectId(user_id) if ObjectId.is_valid(user_id) else user_id
+async def save_request_analytics(user_id: str, client_ip: str, model: str, prompt: str, cache_hit: bool = False):
+    db = getattr(db_helper, "db", None)
+    if db is None:
+        print("❌ Analytics Task: DB client missing")
+        return
 
-    log_document = {
-        "user_id": db_user_id, 
-        "client_ip": client_ip,
-        "model": model,
-        "prompt_length": len(prompt_text),
-        "tokens_used": estimated_tokens,
-        "cost_usd": cost_usd,
-        "timestamp": datetime.datetime.utcnow()
-    }
-    
     try:
-        await db_helper.db.logs.insert_one(log_document)
-        print(f"📊 [DB LOGGED] -> User: {user_id} | Tokens: {estimated_tokens} | Cost: ${cost_usd:.7f}")
+        tokens_count = len(prompt.split()) * 2
+        cost_estimated = 0.0000008 * tokens_count if cache_hit else 0.000002 * tokens_count
+
+        log_entry = {
+            "user_id": user_id,
+            "client_ip": client_ip,
+            "model": model,
+            "prompt": prompt,
+            "cache_hit": cache_hit,
+            "timestamp": datetime.now(timezone.utc),
+            "tokens_used": tokens_count,
+            "cost_usd": cost_estimated
+        }
+        
+        await db.logs.insert_one(log_entry)
+        print(f"✅ [ANALYTICS LOGGED SUCCESSFULLY] Cache Hit: {cache_hit}")
+        
     except Exception as e:
-        print(f"❌ Failed to save analytics to Mongo: {e}")
+        print(f"❌ Error while saving request analytics background task: {e}")

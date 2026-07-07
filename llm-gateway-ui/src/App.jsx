@@ -1,53 +1,59 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Activity, Coins, ShieldAlert, RefreshCw } from 'lucide-react';
+import { BarChart3, Activity, Coins, ShieldAlert, RefreshCw, Layers, Percent } from 'lucide-react';
 
 export default function App() {
   const [range, setRange] = useState('today');
-  const [metrics, setMetrics] = useState({ total_requests: 0, total_tokens: 0, total_cost: 0 });
+  const [metrics, setMetrics] = useState({
+    summary: {
+      total_cached_prompts: 0,
+      total_tokens_saved: 0,
+      total_usd_saved: 0,
+      cache_hit_rate_percentage: 0
+    },
+    top_users: [],
+    daily_trends: { labels: [], hits: [], misses: [] }
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-
-
-
   const fetchMetrics = async () => {
-  setLoading(true);
-  setError(null);
+    setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`http://localhost:8000/api/v1/analytics/dashboard?range=${range}`, {
         method: "GET",
         headers: {
-          "X-API-KEY": "gw_jHyIS09a9KwUmzPXEPlzMqPRCwePllXlLRICgAvuAIk" 
+          "X-API-KEY": "gw_P6Jlrt3ErXFUXOJADiseS33vcq7JsJr8FJtUBKyJ0Sc" 
         }
       });
       
       if (!res.ok) {
-        throw new Error(`server error! Status: ${res.status}`);
+        throw new Error(`Server error! Status: ${res.status}`);
       }
       const data = await res.json();
-      setMetrics(data);
+      
+      if (data.summary) {
+        setMetrics(data);
+      } else {
+        throw new Error("Invalid analytics layout signature received.");
+      }
     } catch (err) {
       console.error(err);
-      setError("Auth failed or backend down!");
+      setError("Authorization failed or your AI Gateway is offline!");
     } finally {
       setLoading(false);
     }
   };
-
-
-
-
 
   useEffect(() => {
   fetchMetrics();
 
   const interval = setInterval(() => {
     fetchMetrics();
-  }, 5000); 
+  }, 15000); 
 
   return () => clearInterval(interval);
 }, [range]);
-
 
   return (
     <div className="p-8 bg-zinc-950 min-h-screen text-zinc-100 font-sans antialiased">
@@ -59,7 +65,7 @@ export default function App() {
             <BarChart3 className="text-amber-500 h-6 w-6" />
             <h1 className="text-2xl font-bold tracking-tight text-zinc-100">LLM Gateway Engine</h1>
           </div>
-          <p className="text-sm text-zinc-400 mt-1">Real-time metrics, tokens overhead and billing diagnostics</p>
+          <p className="text-sm text-zinc-400 mt-1">Real-time metrics, semantic caching layers and resource utilization tracking</p>
         </div>
         
         {/* Actions Layout */}
@@ -94,47 +100,61 @@ export default function App() {
       )}
 
       {/* 📊 Metrics Panels Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         
-        {/* Panel 1: Requests Count */}
-        <div className="bg-zinc-900/60 border border-zinc-950/40 shadow-sm p-6 rounded-xl relative overflow-hidden group hover:border-zinc-800 transition-all duration-300">
+        {/* Panel 1: Tokens Saved */}
+        <div className="bg-zinc-900/60 border border-zinc-900 shadow-sm p-6 rounded-xl relative overflow-hidden group hover:border-zinc-800 transition-all duration-300">
           <div className="flex justify-between items-start">
-            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Total Traffic Volume</p>
-            <Activity className="h-4 w-4 text-zinc-500 group-hover:text-emerald-500 transition-colors" />
-          </div>
-          <h3 className="text-4xl font-extrabold mt-4 tracking-tight text-zinc-100">
-            {loading ? "..." : metrics.total_requests}
-          </h3>
-          <p className="text-xs text-emerald-500 font-medium mt-3 flex items-center gap-1">
-            <span>● Gateway proxies active</span>
-          </p>
-        </div>
-
-        {/* Panel 2: Compute Tokens Overhead */}
-        <div className="bg-zinc-900/60 border border-zinc-950/40 shadow-sm p-6 rounded-xl relative overflow-hidden group hover:border-zinc-800 transition-all duration-300">
-          <div className="flex justify-between items-start">
-            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Compute Tokens Consumed</p>
+            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Tokens Saved (Cache)</p>
             <Coins className="h-4 w-4 text-zinc-500 group-hover:text-amber-500 transition-colors" />
           </div>
           <h3 className="text-4xl font-extrabold mt-4 tracking-tight text-zinc-100">
-            {loading ? "..." : metrics.total_tokens.toLocaleString()}
+            {loading ? "..." : metrics.summary.total_tokens_saved.toLocaleString()}
           </h3>
           <p className="text-xs text-amber-500 font-medium mt-3">
-            ~ Compiled context processing metrics
+            ⚡ Context cost bypass metrics
           </p>
         </div>
 
-        {/* Panel 3: Financial Overhead */}
-        <div className="bg-zinc-900/60 border border-zinc-950/40 shadow-sm p-6 rounded-xl relative overflow-hidden group hover:border-zinc-800 transition-all duration-300 bg-gradient-to-br from-zinc-900/60 to-amber-950/10">
+        {/* Panel 2: Financial Savings */}
+        <div className="bg-zinc-900/60 border border-zinc-900 shadow-sm p-6 rounded-xl relative overflow-hidden group hover:border-zinc-800 transition-all duration-300 bg-gradient-to-br from-zinc-900/60 to-emerald-950/10">
           <div className="flex justify-between items-start">
-            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Estimated Cost Aggregation</p>
-            <span className="text-xs font-bold text-amber-500/80 bg-amber-500/10 px-2 py-0.5 rounded-full">USD</span>
+            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Estimated Cost Saved</p>
+            <span className="text-xs font-bold text-emerald-500/80 bg-emerald-500/10 px-2 py-0.5 rounded-full">USD</span>
           </div>
-          <h3 className="text-4xl font-extrabold mt-4 tracking-tight text-amber-500">
-            {loading ? "$..." : `$${Number(metrics.total_cost).toFixed(6)}`}
+          <h3 className="text-4xl font-extrabold mt-4 tracking-tight text-emerald-500">
+            {loading ? "$..." : `$${Number(metrics.summary.total_usd_saved).toFixed(6)}`}
           </h3>
           <p className="text-xs text-zinc-500 mt-3">
-            Precision algorithmic resource pricing
+            💵 Gemini billing volume saved
+          </p>
+        </div>
+
+        {/* Panel 3: Cache Hit Rate Percentage */}
+        <div className="bg-zinc-900/60 border border-zinc-900 shadow-sm p-6 rounded-xl relative overflow-hidden group hover:border-zinc-800 transition-all duration-300">
+        <div className="flex justify-between items-start">
+          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Cache Hit Efficiency</p>
+          <Percent className="h-4 w-4 text-zinc-500 group-hover:text-cyan-500 transition-colors" />
+        </div>
+        <h3 className="text-4xl font-extrabold mt-4 tracking-tight text-cyan-400">
+          {loading ? "..." : `${metrics.summary.cache_hit_rate_percentage}%`}
+        </h3>
+        <p className="text-xs text-cyan-500 font-medium mt-3">
+          🎯 Exact + Semantic Match performance
+        </p>
+      </div>
+
+        {/* Panel 4: Vector Index Size */}
+        <div className="bg-zinc-900/60 border border-zinc-900 shadow-sm p-6 rounded-xl relative overflow-hidden group hover:border-zinc-800 transition-all duration-300">
+          <div className="flex justify-between items-start">
+            <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Cached Vectors Space</p>
+            <Layers className="h-4 w-4 text-zinc-500 group-hover:text-purple-500 transition-colors" />
+          </div>
+          <h3 className="text-4xl font-extrabold mt-4 tracking-tight text-purple-400">
+            {loading ? "..." : metrics.summary.total_cached_prompts}
+          </h3>
+          <p className="text-xs text-purple-500 font-medium mt-3">
+            📦 Vectors in MongoDB Collection
           </p>
         </div>
 

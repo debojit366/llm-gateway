@@ -102,7 +102,7 @@ async def proxy_gemini_completions(
                 yield b"data: [DONE]\n\n"
                 
             background_tasks.add_task(
-                save_request_analytics, user_id, client_ip, f"{model_name}-cached", last_prompt
+                save_request_analytics, user_id, client_ip, f"{model_name}-cached", last_prompt, True
             )
             print(f"⚡ [CACHE STREAMED - OPENAI COMPATIBLE] Match score: {score:.4f}")
             return StreamingResponse(cached_streamer(), media_type="text/event-stream")
@@ -113,6 +113,7 @@ async def proxy_gemini_completions(
     gemini_payload = translate_to_gemini_format(body)
     upstream_url = f"{settings.GEMINI_BASE_URL}/models/{model_name}:streamGenerateContent?key={settings.GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
+
 
     try:
         client = request.app.state.http_client
@@ -129,7 +130,7 @@ async def proxy_gemini_completions(
             )
 
         background_tasks.add_task(
-            save_request_analytics, user_id, client_ip, model_name, last_prompt
+            save_request_analytics, user_id, client_ip, model_name, last_prompt, False
         )
 
         async def response_interceptor():
