@@ -1,14 +1,16 @@
-
 services:
   gateway:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: llm-gateway-container
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      - WATCHFILES_FORCE_POLLING=true
     volumes:
       - ./app:/code/app
     depends_on:
@@ -23,7 +25,6 @@ services:
       - "6379:6379"   
     restart: always
 
-
   mongodb:           
     image: mongo:latest
     container_name: llm-gateway-mongodb
@@ -33,6 +34,5 @@ services:
       - mongo_data:/data/db  
     restart: always
     
-
 volumes:
   mongo_data:
