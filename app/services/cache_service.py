@@ -1,74 +1,113 @@
 # app/services/cache_service.py
-import math
-import app.db.mongo as mongo 
+import numpy as np
+import redis.asyncio as aioredis
+import hashlib
+from app.core.config import settings
 from app.services.embedding_service import get_embedding
 
-SIMILARITY_THRESHOLD = 0.88 
+# Redis Client Setup
+redis_client = aioredis.from_url(
+    "redis://redis:6379", 
+    encoding="utf-8", 
+    decode_responses=True
+)
+
+def get_prompt_hash(prompt: str) -> str:
+    return hashlib.md5(prompt.strip().lower().encode("utf-8")).hexdigest()
 
 def cosine_similarity(v1, v2):
-    if not v1 or not v2 or len(v1) != len(v2):
-        return 0.0
-        
-    dot_product = sum(a * b for a, b in zip(v1, v2))
-    norm_a = math.sqrt(sum(a * a for a in v1))
-    norm_b = math.sqrt(sum(b * b for b in v2))
+    dot_product = np.dot(v1, v2)
+    norm_v1 = np.linalg.norm(v1)
+    norm_v2 = np.linalg.norm(v2)
+    if norm_v1 == 0 or norm_v2 == 0:
+        return 0
+    return dot_product / (norm_v1 * norm_v2)
+
+async def check_semantic_cache(prompt: str, threshold: float = 0.88):
+    from app.db.mongo import db_helper 
     
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-        
-    return dot_product / (norm_a * norm_b)
-
-async def check_semantic_cache(prompt: str):
-    current_vector = await get_embedding(prompt)
-    if not current_vector:
-        return None, None
-
+    prompt_clean = prompt.strip().lower()
+    prompt_hash = get_prompt_hash(prompt_clean)
+    
+    # -------------------------------------------------------------
+    # LAYER 1: REDIS EXACT MATCH LOOKUP
+    # -------------------------------------------------------------
     try:
-        db_instance = mongo.db_helper.db
+        cached_response = await redis_client.get(f"cache:exact:{prompt_hash}")
+        if cached_response:
+            print(f"🔥 [REDIS EXACT CACHE HIT] Served instantly via Redis String Match!")
+            return cached_response, 1.0
+    except Exception as e:
+        print(f"⚠️ Redis read error: {e}")
+
+    # -------------------------------------------------------------
+    #  LAYER 2: MONGODB SEMANTIC VECTOR LOOKUP
+    # -------------------------------------------------------------
+    try:
+        query_vector = await get_embedding(prompt_clean)
         
-        if db_instance is None:
-            print("⚠️ MongoDB 'db' instance is not initialized yet in db_helper! Skipping cache lookup.")
-            return None, None
+        if not query_vector:
+            print("⚠️ Cache system skipped because embedding generation failed.")
+            return None, 0.0
             
-        cache_records = await db_instance.semantic_cache.find({}).to_list(length=1000)
+        cache_records = await db_helper.client["llm_gateway_db"]["semantic_cache"].find({}).to_list(length=2000)
         
         best_match = None
-        highest_score = 0.0
+        highest_score = -1.0
         
         for record in cache_records:
-            saved_vector = record.get("embedding")
-            score = cosine_similarity(current_vector, saved_vector)
-            
+            cached_vector = record.get("embedding")
+            if not cached_vector:
+                continue
+                
+            score = cosine_similarity(query_vector, cached_vector)
             if score > highest_score:
                 highest_score = score
                 best_match = record
                 
-        if highest_score >= SIMILARITY_THRESHOLD:
-            print(f"🔥 [SEMANTIC CACHE HIT] Score: {highest_score:.4f} | Prompt Match: '{best_match['prompt']}'")
-            return best_match["response"], highest_score
+        if highest_score >= threshold and best_match:
+            cached_text = best_match["response_text"]
             
+            try:
+                await redis_client.setex(f"cache:exact:{prompt_hash}", 86400, cached_text)
+            except Exception:
+                pass
+                
+            print(f"🧠 [MONGO SEMANTIC HIT] Score: {highest_score:.4f} | Prompt Match: '{best_match['prompt']}'")
+            return cached_text, highest_score
+
     except Exception as e:
-        print(f"⚠️ Cache Lookup Error: {e}")
+        print(f"⚠️ Semantic Cache Lookup Error: {e}")
         
-    return None, None
+    return None, 0.0
 
 async def save_to_semantic_cache(prompt: str, response_text: str):
-    vector = await get_embedding(prompt)
-    if not vector:
+    from app.db.mongo import db_helper 
+    
+    if not prompt.strip() or not response_text.strip():
         return
         
+    prompt_clean = prompt.strip().lower()
+    prompt_hash = get_prompt_hash(prompt_clean)
+    
     try:
-        db_instance = mongo.db_helper.db
-        if db_instance is None:
-            print("⚠️ MongoDB 'db' instance is not initialized yet in db_helper! Cannot save cache.")
-            return
+        await redis_client.setex(f"cache:exact:{prompt_hash}", 86400, response_text)
+        print(f"💾 [REDIS CACHE SAVED] Prompt Exact Hash: {prompt_hash}")
+        
+        embedding = await get_embedding(prompt_clean)
+        
+        if embedding:
+            cache_document = {
+                "prompt": prompt,
+                "prompt_hash": prompt_hash,
+                "response_text": response_text,
+                "embedding": embedding
+            }
             
-        cache_document = {
-            "prompt": prompt,
-            "embedding": vector,
-            "response": response_text
-        }
-        await db_instance.semantic_cache.insert_one(cache_document)
-        print(f"💾 [SEMANTIC CACHE SAVED] Prompt: '{prompt}'")
+            await db_helper.client["llm_gateway_db"]["semantic_cache"].insert_one(cache_document)
+            print(f"💾 [MONGO SEMANTIC CACHE SAVED] Prompt: '{prompt}'")
+        else:
+            print("❌ Failed to save semantic cache due to empty embedding output.")
+        
     except Exception as e:
-        print(f"❌ Cache Save Error: {e}")
+        print(f"⚠️ Error while saving cache layer: {e}")

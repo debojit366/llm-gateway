@@ -7,3 +7,4 @@ redis
 flake8
 motor
 google-genai
+numpy

@@ -21,7 +21,7 @@ class OpenAICompletionRequest(BaseModel):
     model: str = Field("gemini-2.5-flash", description="The ID of the model to use")
     messages: List[ChatMessage] = Field(..., description="A list of messages comprising the conversation")
     temperature: float = Field(None, description="What sampling temperature to use")
-    stream: bool = Field(True, description="Enable streaming response") # Default streaming true rakhte hain
+    stream: bool = Field(True, description="Enable streaming response")
 
     class Config:
         json_schema_extra = {
@@ -97,9 +97,7 @@ async def proxy_gemini_completions(
         cached_text, score = await check_semantic_cache(last_prompt)
         if cached_text:
             async def cached_streamer():
-                # OpenAI streams standards me chunks data format 'data: {...}' se start hote hain
                 yield create_openai_chunk(chunk_id, model_name, cached_text, finish_reason=None).encode("utf-8")
-                # Aakhiri chunk data stream khatam karne ke liye
                 yield create_openai_chunk(chunk_id, model_name, "", finish_reason="stop").encode("utf-8")
                 yield b"data: [DONE]\n\n"
                 
