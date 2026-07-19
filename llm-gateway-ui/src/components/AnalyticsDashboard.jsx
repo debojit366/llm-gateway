@@ -11,7 +11,7 @@ const AnalyticsDashboard = () => {
   const fetchAnalytics = async (selectedRange) => {
     setLoading(true);
     try {
-      const manualApiKey = "add_api_key_here"; 
+      const manualApiKey = import.meta.env.VITE_LLM_GATEWAY_API_KEY
       
       const response = await fetch(`http://localhost:8000/api/v1/analytics/dashboard?range=${selectedRange}`, {
         method: "GET",

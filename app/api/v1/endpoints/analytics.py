@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/dashboard")
 async def get_dashboard(
-    range: str = Query("all"),
+    range_param: str = Query("all"),
     current_user: dict = Depends(verify_api_key)
 ):
     db = db_helper.db
@@ -35,13 +35,13 @@ async def get_dashboard(
         # Time filter
         now = datetime.utcnow()
 
-        if range == "today":
+        if range_param  == "today":
             match_filter["timestamp"] = {"$gte": now - timedelta(days=1)}
-        elif range == "7days":
+        elif range_param  == "7days":
             match_filter["timestamp"] = {"$gte": now - timedelta(days=7)}
-        elif range == "30days":
+        elif range_param  == "30days":
             match_filter["timestamp"] = {"$gte": now - timedelta(days=30)}
-        elif range != "all":
+        elif range_param  != "all":
             raise HTTPException(400, "Invalid range")
 
         # Basic stats
@@ -144,7 +144,7 @@ async def get_dashboard(
             )
 
         return {
-            "range_filtered": range,
+            "range_filtered": range_param ,
             "summary": {
                 "total_cached_prompts": total_cached_prompts,
                 "total_tokens_saved": tokens_saved,
