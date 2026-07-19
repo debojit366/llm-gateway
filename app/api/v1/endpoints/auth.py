@@ -1,6 +1,6 @@
 import secrets
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field , EmailStr
 from app.db.mongo import db_helper
 from datetime import datetime
 
@@ -8,7 +8,7 @@ router = APIRouter()
 
 class UserRegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    email: str = Field(..., description="User email address")
+    email: EmailStr
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(payload: UserRegisterRequest):
@@ -36,7 +36,7 @@ async def register_user(payload: UserRegisterRequest):
     result = await db.users.insert_one(new_user)
     
     return {
-        "message": "User registered successfully! Apni API key safe rakho bhai.",
+        "message": "User registered successfully! keep your api key safe.",
         "username": payload.username,
         "api_key": api_key
     }

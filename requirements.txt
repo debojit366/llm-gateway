@@ -8,3 +8,6 @@ flake8
 motor
 google-genai
 numpy
+presidio-analyzer
+presidio-anonymizer
+spacy

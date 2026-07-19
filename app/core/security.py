@@ -3,7 +3,7 @@ from fastapi.security.api_key import APIKeyHeader
 from app.db.mongo import db_helper
 from typing import Dict, Any
 from datetime import datetime, timedelta
-
+from app.services.rate_limiter import check_rate_limit
 
 API_KEY_HEADER = APIKeyHeader(name="X-API-KEY", auto_error=False)
 
@@ -30,27 +30,10 @@ async def verify_api_key(api_key_header: str = Security(API_KEY_HEADER)) -> Dict
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid or Deactivated API Key!"
         )
-    user_id = user["_id"]
-    now = datetime.utcnow()
-    window_start = now - timedelta(seconds=RATE_LIMIT_WINDOW)
-
-    
-    request_count = await db.rate_limits.count_documents({
-        "user_id": user_id,
-        "timestamp": {"$gte": window_start}
-    })
-
-    if request_count >= RATE_LIMIT_MAX_REQUESTS:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Rate limit hit try again after 1 min."
-        )
-
-    await db.rate_limits.insert_one({
-        "user_id": user_id,
-        "timestamp": now
-    })
-    
-    await db.rate_limits.delete_many({"timestamp": {"$lt": window_start}})
+    await check_rate_limit(
+    key=f"user:{user['_id']}",
+    limit=10,
+    window=60
+)
         
     return user 
