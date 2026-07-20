@@ -26,9 +26,9 @@ class PIIMaskingMiddleware:
                             if "messages" in body_json:
                                 for msg in body_json["messages"]:
                                     if "content" in msg:
-                                        #print("before masking", msg["content"])
+                                        # print("before masking", msg["content"])
                                         msg["content"] = mask_pii_data(msg["content"])
-                                        #print("after masking", msg["content"])
+                                        # print("after masking", msg["content"])
                             
                             modified_body = json.dumps(body_json).encode("utf-8")
                             message["body"] = modified_body

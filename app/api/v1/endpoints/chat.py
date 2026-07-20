@@ -100,9 +100,9 @@ async def proxy_gemini_completions(
                 yield create_openai_chunk(chunk_id, model_name, cached_text, finish_reason=None).encode("utf-8")
                 yield create_openai_chunk(chunk_id, model_name, "", finish_reason="stop").encode("utf-8")
                 yield b"data: [DONE]\n\n"
-                
+
             background_tasks.add_task(
-                save_request_analytics, user_id, client_ip, f"{model_name}-cached", last_prompt, True
+                save_request_analytics, user_id, client_ip, f"{model_name}-cached", last_prompt, True, len(cached_text) // 4
             )
             print(f"⚡ [CACHE STREAMED - OPENAI COMPATIBLE] Match score: {score:.4f}")
             return StreamingResponse(cached_streamer(), media_type="text/event-stream")
@@ -111,9 +111,8 @@ async def proxy_gemini_completions(
     #  STEP 2: CACHE MISS -> HIT GEMINI UPSTREAM
     # -------------------------------------------------------------
     gemini_payload = translate_to_gemini_format(body)
-    upstream_url = f"{settings.GEMINI_BASE_URL}/models/{model_name}:streamGenerateContent?key={settings.GEMINI_API_KEY}"
+    upstream_url = f"{settings.GEMINI_BASE_URL}/models/{model_name}:streamGenerateContent?alt=sse&key={settings.GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
-
 
     try:
         client = request.app.state.http_client
@@ -129,50 +128,55 @@ async def proxy_gemini_completions(
                 detail=f"Gemini Upstream Error: {upstream_response.text}"
             )
 
-        background_tasks.add_task(
-            save_request_analytics, user_id, client_ip, model_name, last_prompt, False
-        )
 
         async def response_interceptor():
             full_text_buffer = ""
+            usage_metadata = {}
+            raw_buffer = ""
+
             async for chunk in upstream_response.aiter_bytes():
+                # print(f"🔍 RAW GEMINI CHUNK >>> {chunk!r}")
                 try:
-                    chunk_str = chunk.decode("utf-8").strip()
-                    
-                    for line in chunk_str.splitlines():
-                        line = line.strip()
-                        if not line:
-                            continue
-                            
-                        cleaned_line = line.lstrip(",[").rstrip(",]")
-                        if not cleaned_line:
-                            continue
-                            
-                        try:
-                            data = json.loads(cleaned_line)
-                            if "candidates" in data and data["candidates"]:
-                                candidate = data["candidates"][0]
-                                if "content" in candidate and "parts" in candidate["content"]:
-                                    text_part = candidate["content"]["parts"][0].get("text", "")
-                                    if text_part:
-                                        full_text_buffer += text_part
-                                        openai_formatted_chunk = create_openai_chunk(chunk_id, model_name, text_part)
-                                        yield openai_formatted_chunk.encode("utf-8")
-                        except json.JSONDecodeError:
-                            if '"text":' in cleaned_line:
-                                try:
-                                    parts = cleaned_line.split('"text":')
-                                    if len(parts) > 1:
-                                        text_val = parts[1].split('"')[1]
-                                        text_part = bytes(text_val, "utf-8").decode("unicode_escape")
-                                        if text_part:
-                                            full_text_buffer += text_part
-                                            openai_formatted_chunk = create_openai_chunk(chunk_id, model_name, text_part)
-                                            yield openai_formatted_chunk.encode("utf-8")
-                                except Exception:
-                                    pass
+                    raw_buffer += chunk.decode("utf-8")
                 except Exception as e:
-                    print(f"⚠️ Chunk Interceptor Parsing Warning: {e}")
+                    print(f"⚠️ Chunk decode error: {e}")
+                    continue
+
+                
+                while "\r\n\r\n" in raw_buffer:
+                    event, raw_buffer = raw_buffer.split("\r\n\r\n", 1)
+                    event = event.strip()
+
+                    if not event.startswith("data:"):
+                        continue
+
+                    json_str = event[len("data:"):].strip()
+
+                    if not json_str or json_str == "[DONE]":
+                        continue
+
+                    try:
+                        data = json.loads(json_str)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if not isinstance(data, dict):
+                        continue
+
+                    if "usageMetadata" in data:
+                        usage_metadata = data["usageMetadata"]
+                        # print(f"📊 USAGE METADATA FOUND: {usage_metadata}")
+
+                    if "candidates" in data and data["candidates"]:
+                        candidate = data["candidates"][0]
+                        content = candidate.get("content", {})
+                        parts = content.get("parts", [])
+                        if parts:
+                            text_part = parts[0].get("text", "")
+                            if text_part:
+                                full_text_buffer += text_part
+                                openai_formatted_chunk = create_openai_chunk(chunk_id, model_name, text_part)
+                                yield openai_formatted_chunk.encode("utf-8")
 
             yield create_openai_chunk(chunk_id, model_name, "", finish_reason="stop").encode("utf-8")
             yield b"data: [DONE]\n\n"
@@ -180,6 +184,22 @@ async def proxy_gemini_completions(
             if full_text_buffer.strip():
                 print(f"📝 [BUFFER ASSEMBLED] Length: {len(full_text_buffer)} characters.")
                 background_tasks.add_task(save_to_semantic_cache, last_prompt, full_text_buffer)
+
+            total_tokens = usage_metadata.get("totalTokenCount", 0)
+            prompt_tokens = usage_metadata.get("promptTokenCount", 0)
+            completion_tokens = usage_metadata.get("candidatesTokenCount", 0)
+            token_source = "gemini_actual"
+            if total_tokens == 0:
+                token_source = "estimated_fallback"
+                prompt_tokens = prompt_tokens or (len(last_prompt) // 4)
+                completion_tokens = completion_tokens or (len(full_text_buffer) // 4)
+                total_tokens = prompt_tokens + completion_tokens
+            print(f"📊 [TOKEN SOURCE: {token_source}] Prompt: {prompt_tokens} | Completion: {completion_tokens} | Total: {total_tokens}")
+            background_tasks.add_task(
+                save_request_analytics,
+                user_id, client_ip, model_name, last_prompt, False,
+                total_tokens, prompt_tokens, completion_tokens
+            )
 
         return StreamingResponse(
             response_interceptor(),

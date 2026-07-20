@@ -11,3 +11,4 @@ numpy
 presidio-analyzer
 presidio-anonymizer
 spacy
+qdrant-client

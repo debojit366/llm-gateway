@@ -39,7 +39,15 @@ def mask_pii_data(text: str) -> str:
     # -----------------------------
     results = analyzer.analyze(
         text=text,
-        language="en"
+        language="en",
+        entities=[
+        "PERSON",
+        "EMAIL_ADDRESS",
+        "PHONE_NUMBER",
+        "IP_ADDRESS",
+        "URL",
+        "CREDIT_CARD",
+    ]
     )
 
     # -----------------------------

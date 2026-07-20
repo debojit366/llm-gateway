@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""  
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
 
-    REDIS_URL: str = "redis://localhost:6379/0"
-    QDRANT_URL: str = "http://localhost:6333"
+    REDIS_URL: str = "redis://redis:6379/0"
+    QDRANT_URL: str = "http://qdrant:6333"
 
     class Config:
         env_file = ".env"
