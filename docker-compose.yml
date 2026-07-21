@@ -11,6 +11,7 @@ services:
       - .env
     environment:
       - WATCHFILES_FORCE_POLLING=true
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./app:/code/app
     depends_on:
