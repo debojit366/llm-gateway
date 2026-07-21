@@ -7,8 +7,15 @@ from app.api.v1.endpoints import chat, analytics, auth
 from app.middlewares.pii_middleware import PIIMaskingMiddleware
 from app.middlewares.rate_limit_middleware import RateLimitMiddleware
 from app.db.mongo import connect_to_mongo, close_mongo_connection
+import logging
 
-
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    force=True,   # overwrite uvicorn default config
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
