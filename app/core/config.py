@@ -7,6 +7,16 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""  
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
 
+
+
+
+
+    GROQ_API_KEY: str = ""
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+
+
+
+
     REDIS_URL: str = "redis://redis:6379/0"
     QDRANT_URL: str = "http://qdrant:6333"
 

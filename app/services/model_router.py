@@ -1,16 +1,17 @@
 from fastapi import HTTPException
 
-from app.services.providers.gemini_provider import GeminiProvider
-from app.services.providers.openai_provider import OpenAIProvider
+from app.providers.gemini.provider import GeminiProvider
+from app.providers.groq.provider import GroqProvider
 
-
+GROQ_MODELS = {"llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "mixtral-8x7b-32768"}
 class ModelRouter:
 
     def __init__(self):
 
         self.providers = {
             "gemini": GeminiProvider(),
-            "gpt": OpenAIProvider(),
+            "groq": GroqProvider(),
+            
         }
 
     async def chat(
@@ -25,6 +26,9 @@ class ModelRouter:
 
         if model.startswith("gemini"):
             provider = self.providers["gemini"]
+
+        elif model in GROQ_MODELS:
+            provider = self.providers["groq"]
 
         elif model.startswith("gpt"):
             provider = self.providers["gpt"]
