@@ -11,7 +11,7 @@ const AnalyticsDashboard = () => {
   const fetchAnalytics = async (selectedRange) => {
     setLoading(true);
     try {
-      const manualApiKey = import.meta.env.VITE_LLM_GATEWAY_API_KEY
+      const manualApiKey = import.meta.env.VITE_LLM_GATEWAY_API_KEY;
       
       const response = await fetch(`http://localhost:8000/api/v1/analytics/dashboard?range_param=${selectedRange}`, {
         method: "GET",
@@ -39,7 +39,7 @@ const AnalyticsDashboard = () => {
     return () => clearInterval(interval);
   }, [range]);
 
-  if (loading && !data) return <div className="text-white p-6">Loading dynamic matrices bhai...</div>;
+  if (loading && !data) return <div className="text-white p-6">Loading dynamic metrics...</div>;
   if (error) return <div className="text-red-400 p-6">Error: {error}</div>;
 
   const chartData = data?.daily_trends?.labels.map((label, index) => ({
@@ -47,6 +47,9 @@ const AnalyticsDashboard = () => {
     Hits: data.daily_trends.hits[index] || 0,
     Misses: data.daily_trends.misses[index] || 0,
   })) || [];
+
+  // Model distribution fallback array
+  const modelsData = data?.top_models || data?.model_distribution || [];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 font-sans">
@@ -85,7 +88,7 @@ const AnalyticsDashboard = () => {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Cached Prompts</p>
-              <h3 className="text-2xl font-bold mt-2 text-white">{data?.summary?.total_cached_prompts}</h3>
+              <h3 className="text-2xl font-bold mt-2 text-white">{data?.summary?.total_cached_prompts || 0}</h3>
             </div>
             <div className="p-3 bg-cyan-500/10 text-cyan-400 rounded-xl"><Zap size={20} /></div>
           </div>
@@ -98,7 +101,7 @@ const AnalyticsDashboard = () => {
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Tokens Saved</p>
               <h3 className="text-2xl font-bold mt-2 text-emerald-400">
-                {data?.summary?.total_tokens_saved.toLocaleString()}
+                {data?.summary?.total_tokens_saved ? data.summary.total_tokens_saved.toLocaleString() : 0}
               </h3>
             </div>
             <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-xl"><Cpu size={20} /></div>
@@ -112,7 +115,7 @@ const AnalyticsDashboard = () => {
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Revenue Saved (USD)</p>
               <h3 className="text-2xl font-bold mt-2 text-amber-400">
-                ${data?.summary?.total_usd_saved ? data.summary.total_usd_saved.toFixed(10) : "0.00000"}
+                ${data?.summary?.total_usd_saved ? data.summary.total_usd_saved.toFixed(6) : "0.000000"}
               </h3>
             </div>
             <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl"><DollarSign size={20} /></div>
@@ -126,7 +129,7 @@ const AnalyticsDashboard = () => {
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Cache Hit Rate</p>
               <h3 className="text-2xl font-bold mt-2 text-indigo-400">
-                {data?.summary?.cache_hit_rate_percentage}%
+                {data?.summary?.cache_hit_rate_percentage || 0}%
               </h3>
             </div>
             <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-xl"><Activity size={20} /></div>
@@ -172,19 +175,20 @@ const AnalyticsDashboard = () => {
           </div>
         </div>
 
-        {/* USER / MODEL TOKENS USED DISTRIBUTION CHART */}
+        {/* ⚡ MODEL DISTRIBUTION CHART (FIXED KEYS HERE) */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between">
           <div>
             <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-              <Cpu size={18} className="text-amber-400" /> Model / User Distribution
+              <Cpu size={18} className="text-amber-400" /> Model Distribution
             </h2>
             <p className="text-xs text-slate-400 mb-4">Top utilization matrix sorted by traffic volume</p>
             
             <div className="h-[200px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data?.top_users || []} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                <BarChart data={modelsData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis dataKey="user_id" stroke="#64748b" fontSize={10} tickLine={false} />
+                  {/* Changed dataKey from 'user_id' to 'model' */}
+                  <XAxis dataKey="model" stroke="#64748b" fontSize={10} tickLine={false} />
                   <YAxis stroke="#64748b" fontSize={10} tickLine={false} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
@@ -198,9 +202,10 @@ const AnalyticsDashboard = () => {
 
           {/* LIST VIEWS FOR EXACT NUMBERS */}
           <div className="mt-4 space-y-3">
-            {data?.top_users?.map((item, idx) => (
+            {modelsData.map((item, idx) => (
               <div key={idx} className="flex justify-between items-center p-2 rounded-lg bg-slate-950 border border-slate-800/60 text-xs">
-                <span className="font-mono text-slate-300 truncate max-w-[160px]">{item.user_id}</span>
+                {/* Changed item.user_id to item.model */}
+                <span className="font-mono text-slate-300 truncate max-w-[160px]">{item.model}</span>
                 <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-bold">
                   {item.requests} reqs
                 </span>

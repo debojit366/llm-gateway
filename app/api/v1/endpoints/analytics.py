@@ -1,4 +1,3 @@
-# app/api/analytics.py
 from fastapi import APIRouter, Query, HTTPException, Depends
 from app.db.mongo import db_helper
 from app.core.security import verify_api_key
@@ -9,6 +8,7 @@ import traceback
 import asyncio
 
 router = APIRouter()
+
 
 @router.get("/dashboard")
 async def get_dashboard(
@@ -21,20 +21,16 @@ async def get_dashboard(
 
     try:
         user_id = current_user.get("_id")
-        # print(f"user id is {user_id}")
         if not user_id:
             raise HTTPException(401, "Invalid user")
+
+        # Clean & robust User ID matching (Supports String + ObjectId)
         str_user_id = str(user_id)
-        user_ids_to_match = [str_user_id]  # Must include String representation
+        user_ids_to_match = [str_user_id]
         if ObjectId.is_valid(str_user_id):
             user_ids_to_match.append(ObjectId(str_user_id))
-        match_filter = {
-            "user_id": {
-                "$in": user_ids_to_match
-                if ObjectId.is_valid(str(user_id))
-                else [user_id]
-            }
-        }
+
+        match_filter = {"user_id": {"$in": user_ids_to_match}}
 
         # Time filter
         now = datetime.utcnow()
@@ -49,7 +45,6 @@ async def get_dashboard(
 
         # Basic Stats
         total_requests = await db.logs.count_documents(match_filter)
-        print(f"total requests are-> {total_requests}")
         total_hits = await db.logs.count_documents({**match_filter, "cache_hit": True})
         hit_rate = round((total_hits * 100 / total_requests), 2) if total_requests else 0.0
 
@@ -78,18 +73,46 @@ async def get_dashboard(
         tokens_saved = savings_res[0]["tokens_saved"] if savings_res else 0
         cost_saved = round(savings_res[0]["cost_saved"], 8) if savings_res else 0.0
 
-        # Top Models
+        # ------------------ ⚡ TOP MODELS / MODEL DISTRIBUTION FIX ------------------
         top_models_pipeline = [
             {"$match": match_filter},
-            {"$group": {"_id": "$model", "requests": {"$sum": 1}}},
+            {
+                "$project": {
+                    # Strip "-cached" suffix from model names so they group together
+                    "clean_model": {
+                        "$replaceAll": {
+                            "input": {"$ifNull": ["$model", "unknown"]},
+                            "find": "-cached",
+                            "replacement": ""
+                        }
+                    }
+                }
+            },
+            {"$group": {"_id": "$clean_model", "requests": {"$sum": 1}}},
             {"$sort": {"requests": -1}},
             {"$limit": 5}
         ]
         models_res = await db.logs.aggregate(top_models_pipeline).to_list(5)
-        top_models = [{"model": item["_id"], "requests": item["requests"]} for item in models_res]
 
+        top_models = [
+            {
+                "model": item["_id"],
+                "name": item["_id"],        # Recharts / Donut chart label compatibility
+                "requests": item["requests"],
+                "value": item["requests"]    # Recharts value compatibility
+            }
+            for item in models_res
+        ]
+
+        # Complete fallback object if no models are logged yet
         if not top_models:
-            top_models = [{"model": "gemini-2.5-flash", "requests": total_requests}]
+            top_models = [{
+                "model": "gemini-2.5-flash",
+                "name": "gemini-2.5-flash",
+                "requests": total_requests,
+                "value": total_requests
+            }]
+        # -------------------------------------------------------------------------
 
         # Daily Trends (Last 7 Days)
         seven_days_ago = datetime.combine(now.date() - timedelta(days=6), time.min)
@@ -141,6 +164,7 @@ async def get_dashboard(
                 "cache_hit_rate_percentage": hit_rate
             },
             "top_models": top_models,
+            "model_distribution": top_models,  # Added for Frontend chart compatibility
             "daily_trends": {
                 "labels": labels,
                 "hits": hits,
