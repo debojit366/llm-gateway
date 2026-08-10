@@ -1,12 +1,14 @@
+# app/api/analytics.py
 from fastapi import APIRouter, Query, HTTPException, Depends
 from app.db.mongo import db_helper
 from app.core.security import verify_api_key
-from datetime import datetime, timedelta
+from app.db.qdrant_client import qdrant_client, COLLECTION_NAME
+from datetime import datetime, timedelta, time
 from bson import ObjectId
 import traceback
+import asyncio
 
 router = APIRouter()
-
 
 @router.get("/dashboard")
 async def get_dashboard(
@@ -14,19 +16,21 @@ async def get_dashboard(
     current_user: dict = Depends(verify_api_key)
 ):
     db = db_helper.db
-
     if db is None:
         raise HTTPException(500, "Database not initialized")
 
     try:
-        # User ID
         user_id = current_user.get("_id")
+        # print(f"user id is {user_id}")
         if not user_id:
             raise HTTPException(401, "Invalid user")
-
+        str_user_id = str(user_id)
+        user_ids_to_match = [str_user_id]  # Must include String representation
+        if ObjectId.is_valid(str_user_id):
+            user_ids_to_match.append(ObjectId(str_user_id))
         match_filter = {
             "user_id": {
-                "$in": [user_id, ObjectId(user_id)]
+                "$in": user_ids_to_match
                 if ObjectId.is_valid(str(user_id))
                 else [user_id]
             }
@@ -34,36 +38,33 @@ async def get_dashboard(
 
         # Time filter
         now = datetime.utcnow()
-
-        if range_param  == "today":
+        if range_param == "today":
             match_filter["timestamp"] = {"$gte": now - timedelta(days=1)}
-        elif range_param  == "7days":
+        elif range_param == "7days":
             match_filter["timestamp"] = {"$gte": now - timedelta(days=7)}
-        elif range_param  == "30days":
+        elif range_param == "30days":
             match_filter["timestamp"] = {"$gte": now - timedelta(days=30)}
-        elif range_param  != "all":
-            raise HTTPException(400, "Invalid range")
+        elif range_param != "all":
+            raise HTTPException(400, "Invalid range parameter")
 
-        # Basic stats
+        # Basic Stats
         total_requests = await db.logs.count_documents(match_filter)
-        total_hits = await db.logs.count_documents(
-            {**match_filter, "cache_hit": True}
-        )
+        print(f"total requests are-> {total_requests}")
+        total_hits = await db.logs.count_documents({**match_filter, "cache_hit": True})
+        hit_rate = round((total_hits * 100 / total_requests), 2) if total_requests else 0.0
 
-        hit_rate = (
-            round(total_hits * 100 / total_requests, 2)
-            if total_requests
-            else 0
-        )
-
-        # Cached prompts
+        # Total cached prompts count directly from Qdrant
         try:
-            total_cached_prompts = await db.semantic_cache.count_documents({})
-        except:
+            loop = asyncio.get_running_loop()
+            qdrant_info = await loop.run_in_executor(
+                None, lambda: qdrant_client.get_collection(COLLECTION_NAME)
+            )
+            total_cached_prompts = qdrant_info.points_count
+        except Exception:
             total_cached_prompts = 0
 
         # Tokens & Cost saved
-        pipeline = [
+        savings_pipeline = [
             {"$match": {**match_filter, "cache_hit": True}},
             {
                 "$group": {
@@ -73,85 +74,73 @@ async def get_dashboard(
                 }
             }
         ]
+        savings_res = await db.logs.aggregate(savings_pipeline).to_list(1)
+        tokens_saved = savings_res[0]["tokens_saved"] if savings_res else 0
+        cost_saved = round(savings_res[0]["cost_saved"], 8) if savings_res else 0.0
 
-        result = await db.logs.aggregate(pipeline).to_list(1)
-
-        tokens_saved = result[0]["tokens_saved"] if result else 0
-        cost_saved = result[0]["cost_saved"] if result else 0
-
-        # Top models
-        pipeline = [
+        # Top Models
+        top_models_pipeline = [
             {"$match": match_filter},
-            {
-                "$group": {
-                    "_id": "$model",
-                    "requests": {"$sum": 1}
-                }
-            },
+            {"$group": {"_id": "$model", "requests": {"$sum": 1}}},
             {"$sort": {"requests": -1}},
             {"$limit": 5}
         ]
+        models_res = await db.logs.aggregate(top_models_pipeline).to_list(5)
+        top_models = [{"model": item["_id"], "requests": item["requests"]} for item in models_res]
 
-        top_models = await db.logs.aggregate(pipeline).to_list(5)
+        if not top_models:
+            top_models = [{"model": "gemini-2.5-flash", "requests": total_requests}]
 
-        top_users = [
+        # Daily Trends (Last 7 Days)
+        seven_days_ago = datetime.combine(now.date() - timedelta(days=6), time.min)
+        trends_pipeline = [
             {
-                "user_id": item["_id"],
-                "requests": item["requests"]
+                "$match": {
+                    **match_filter,
+                    "timestamp": {"$gte": seven_days_ago}
+                }
+            },
+            {
+                "$group": {
+                    "_id": {
+                        "day": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
+                        "hit": "$cache_hit"
+                    },
+                    "count": {"$sum": 1}
+                }
             }
-            for item in top_models
         ]
+        trends_raw = await db.logs.aggregate(trends_pipeline).to_list(None)
 
-        if not top_users:
-            top_users = [{
-                "user_id": "gemini-2.5-flash",
-                "requests": total_requests
-            }]
-
-        # Daily Trends
-        labels = []
-        hits = []
-        misses = []
-
+        # Mapping pipeline data into structured response
+        trends_map = {}
         for i in range(6, -1, -1):
-            day = now - timedelta(days=i)
+            day_dt = now - timedelta(days=i)
+            day_str = day_dt.strftime("%Y-%m-%d")
+            label_str = day_dt.strftime("%a")
+            trends_map[day_str] = {"label": label_str, "hits": 0, "misses": 0}
 
-            start = datetime(day.year, day.month, day.day)
-            end = start + timedelta(days=1)
+        for item in trends_raw:
+            day_key = item["_id"]["day"]
+            if day_key in trends_map:
+                if item["_id"]["hit"]:
+                    trends_map[day_key]["hits"] = item["count"]
+                else:
+                    trends_map[day_key]["misses"] = item["count"]
 
-            labels.append(day.strftime("%a"))
-
-            hits.append(
-                await db.logs.count_documents({
-                    **match_filter,
-                    "timestamp": {
-                        "$gte": start,
-                        "$lt": end
-                    },
-                    "cache_hit": True
-                })
-            )
-
-            misses.append(
-                await db.logs.count_documents({
-                    **match_filter,
-                    "timestamp": {
-                        "$gte": start,
-                        "$lt": end
-                    },
-                    "cache_hit": False
-                })
-            )
+        labels = [v["label"] for v in trends_map.values()]
+        hits = [v["hits"] for v in trends_map.values()]
+        misses = [v["misses"] for v in trends_map.values()]
 
         return {
-            "range_filtered": range_param ,
+            "range_filtered": range_param,
             "summary": {
                 "total_cached_prompts": total_cached_prompts,
                 "total_tokens_saved": tokens_saved,
-                "total_usd_saved": round(cost_saved, 8),
+                "total_usd_saved": cost_saved,
                 "cache_hit_rate_percentage": hit_rate
             },
-            "top_users": top_users,
+            "top_models": top_models,
             "daily_trends": {
                 "labels": labels,
                 "hits": hits,

@@ -32,7 +32,7 @@ async def verify_api_key(api_key_header: str = Security(API_KEY_HEADER)) -> Dict
         )
     await check_rate_limit(
     key=f"user:{user['_id']}",
-    limit=10,
+    limit=30,
     window=60
 )
         

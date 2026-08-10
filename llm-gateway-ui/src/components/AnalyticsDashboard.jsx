@@ -13,7 +13,7 @@ const AnalyticsDashboard = () => {
     try {
       const manualApiKey = import.meta.env.VITE_LLM_GATEWAY_API_KEY
       
-      const response = await fetch(`http://localhost:8000/api/v1/analytics/dashboard?range=${selectedRange}`, {
+      const response = await fetch(`http://localhost:8000/api/v1/analytics/dashboard?range_param=${selectedRange}`, {
         method: "GET",
         headers: {
           "X-API-Key": manualApiKey, 
@@ -112,7 +112,7 @@ const AnalyticsDashboard = () => {
             <div>
               <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Revenue Saved (USD)</p>
               <h3 className="text-2xl font-bold mt-2 text-amber-400">
-                ${data?.summary?.total_usd_saved ? data.summary.total_usd_saved.toFixed(5) : "0.00000"}
+                ${data?.summary?.total_usd_saved ? data.summary.total_usd_saved.toFixed(10) : "0.00000"}
               </h3>
             </div>
             <div className="p-3 bg-amber-500/10 text-amber-400 rounded-xl"><DollarSign size={20} /></div>
@@ -172,7 +172,7 @@ const AnalyticsDashboard = () => {
           </div>
         </div>
 
-        {/* 👑 USER / MODEL TOKENS USED DISTRIBUTION CHART */}
+        {/* USER / MODEL TOKENS USED DISTRIBUTION CHART */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col justify-between">
           <div>
             <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">

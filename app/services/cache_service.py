@@ -2,6 +2,7 @@
 import redis.asyncio as aioredis
 import hashlib
 import uuid
+import asyncio
 from app.core.config import settings
 from app.services.embedding_service import get_embedding
 from app.db.qdrant_client import qdrant_client, COLLECTION_NAME
@@ -13,15 +14,11 @@ redis_client = aioredis.from_url(
     decode_responses=True
 )
 
-
 def get_prompt_hash(prompt: str) -> str:
     return hashlib.md5(prompt.strip().lower().encode("utf-8")).hexdigest()
 
-
 def get_point_id(prompt_hash: str) -> str:
-    
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, prompt_hash))
-
 
 async def check_semantic_cache(prompt: str, threshold: float = 0.88):
     prompt_clean = prompt.strip().lower()
@@ -43,19 +40,24 @@ async def check_semantic_cache(prompt: str, threshold: float = 0.88):
             print("⚠️ Embedding generation failed, skipping semantic cache.")
             return None, 0.0
 
-        results = qdrant_client.query_points(
-            collection_name=COLLECTION_NAME,
-            query=query_vector,
-            limit=1,
-            with_payload=True
-        ).points
+        # Run synchronous Qdrant call in threadpool to prevent event loop blocking
+        loop = asyncio.get_running_loop()
+        results = await loop.run_in_executor(
+            None,
+            lambda: qdrant_client.query_points(
+                collection_name=COLLECTION_NAME,
+                query=query_vector,
+                limit=1,
+                with_payload=True
+            ).points
+        )
 
         if results:
             best_match = results[0]
             score = best_match.score
 
             if score >= threshold:
-                cached_text = best_match.payload["response_text"]
+                cached_text = best_match.payload.get("response_text")
 
                 try:
                     await redis_client.setex(f"cache:exact:{prompt_hash}", 86400, cached_text)
@@ -86,19 +88,23 @@ async def save_to_semantic_cache(prompt: str, response_text: str):
         embedding = await get_embedding(prompt_clean)
 
         if embedding:
-            qdrant_client.upsert(
-                collection_name=COLLECTION_NAME,
-                points=[
-                    PointStruct(
-                        id=point_id,         
-                        vector=embedding,
-                        payload={
-                            "prompt": prompt,
-                            "prompt_hash": prompt_hash, 
-                            "response_text": response_text
-                        }
-                    )
-                ]
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: qdrant_client.upsert(
+                    collection_name=COLLECTION_NAME,
+                    points=[
+                        PointStruct(
+                            id=point_id,         
+                            vector=embedding,
+                            payload={
+                                "prompt": prompt,
+                                "prompt_hash": prompt_hash, 
+                                "response_text": response_text
+                            }
+                        )
+                    ]
+                )
             )
             print(f"💾 [QDRANT CACHE SAVED] Prompt: '{prompt}'")
         else:

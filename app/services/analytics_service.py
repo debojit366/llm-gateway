@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from app.db.mongo import db_helper
 from bson import ObjectId 
 
-
 GEMINI_PRICING = {
     "gemini-2.5-flash": {"input": 0.30, "output": 2.50},
     "gemini-2.5-flash-lite": {"input": 0.10, "output": 0.40},
@@ -12,11 +11,12 @@ GEMINI_PRICING = {
 }
 
 def calculate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    pricing = GEMINI_PRICING.get(model, GEMINI_PRICING["gemini-2.5-flash"])  # fallback
+    base_model = model.replace("-cached", "")
+    pricing = GEMINI_PRICING.get(base_model, GEMINI_PRICING["gemini-2.5-flash"])  # fallback
+    
     input_cost = (pricing["input"] / 1_000_000) * prompt_tokens
     output_cost = (pricing["output"] / 1_000_000) * completion_tokens
     return input_cost + output_cost
-
 
 
 async def save_request_analytics(
@@ -33,9 +33,15 @@ async def save_request_analytics(
             total_tokens = len(prompt) // 4
 
         if cache_hit:
-            cost_estimated = 0.0 
+            if prompt_tokens == 0 and completion_tokens == 0:
+                base_model = model.replace("-cached", "")
+                pricing = GEMINI_PRICING.get(base_model, GEMINI_PRICING["gemini-2.5-flash"])
+                cost_estimated = (pricing["input"] / 1_000_000) * total_tokens
+            else:
+                cost_estimated = calculate_cost(model, prompt_tokens, completion_tokens)
         else:
             cost_estimated = calculate_cost(model, prompt_tokens, completion_tokens)
+        # -------------------------------------------------
 
         log_entry = {
             "user_id": user_id,
@@ -47,11 +53,11 @@ async def save_request_analytics(
             "tokens_used": total_tokens,
             "prompt_tokens": prompt_tokens,
             "completion_tokens": completion_tokens,
-            "cost_usd": cost_estimated
+            "cost_usd": cost_estimated 
         }
 
         await db.logs.insert_one(log_entry)
-        print(f"✅ [ANALYTICS LOGGED] Tokens: {total_tokens} | Cost: ${cost_estimated:.8f}")
+        print(f"✅ [ANALYTICS LOGGED] Cache Hit: {cache_hit} | Tokens: {total_tokens} | Cost: ${cost_estimated:.8f}")
 
     except Exception as e:
         print(f"❌ Error while saving request analytics background task: {e}")
